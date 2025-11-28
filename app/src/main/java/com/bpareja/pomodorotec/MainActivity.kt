@@ -23,6 +23,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Llama a esta función para establecer el tiempo de inicio de prueba
+        // 🚨 CAMBIO CRÍTICO PARA PRUEBAS: 10 segundos
+        viewModel.setTestingStartTime(10)
+        // ---------------------------------------------
+
         viewModel.updateTimerData()
 
         setContent {
@@ -33,7 +38,7 @@ class MainActivity : ComponentActivity() {
         // Solicitar permiso para notificaciones en Android 13+
         requestNotificationPermission()
 
-        }
+    }
 
 
     private fun createNotificationChannel() {

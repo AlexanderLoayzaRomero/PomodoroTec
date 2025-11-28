@@ -21,7 +21,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             // Lee los datos desde SharedPreferences (guardados por el ViewModel)
             val prefs = context.getSharedPreferences("pomodoro_prefs", Context.MODE_PRIVATE)
             val phase = prefs.getString("phase", "Concentración") ?: "Concentración"
-            val timeLeft = prefs.getString("timeLeft", "25:00") ?: "25:00"
+            val timeLeft = prefs.getString("timeLeft", "00:10") ?: "00:10"
             val progress = prefs.getInt("progress", 0)
 
             val views = RemoteViews(context.packageName, R.layout.widget_pomodoro)

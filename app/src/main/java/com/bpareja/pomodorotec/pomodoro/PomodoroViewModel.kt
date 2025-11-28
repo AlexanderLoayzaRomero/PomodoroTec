@@ -41,7 +41,7 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
     private val context = getApplication<Application>().applicationContext
 
     // Estados observables (LiveData)
-    private val _timeLeft = MutableLiveData("25:00") // Tiempo mostrado en UI
+    private val _timeLeft = MutableLiveData("25:00") // Tiempo inicial correcto
     val timeLeft: LiveData<String> = _timeLeft
 
     private val _isRunning = MutableLiveData(false) // Estado del timer
@@ -59,18 +59,52 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
     // Variables de control del timer
     private var countDownTimer: CountDownTimer? = null
 
+    // Variable de control de tiempo de prueba
+    private var testingStartTimeSeconds: Int = 0
+
+    // Declaración inicial con valores reales
     private var totalTimeInMillis: Long = 25 * 60 * 1000L // Tiempo total (25 min)
-    private var timeRemainingInMillis: Long = 25 * 60 * 1000L // Tiempo inicial para FOCUS
+    private var timeRemainingInMillis: Long = 25 * 60 * 1000L // Tiempo inicial para FOCUS (25 min)
+
+    // Función pública para cambiar el tiempo de inicio de prueba
+    /**
+     * Establece el tiempo restante en segundos para simular el inicio de la sesión.
+     * Si se establece en 0, usa la duración completa.
+     */
+    fun setTestingStartTime(seconds: Int) {
+        testingStartTimeSeconds = seconds
+        // Es buena práctica reiniciar el contador al cambiar el tiempo de prueba
+        resetTimer()
+    }
 
     // ----------- FUNCIONES PRINCIPALES ------------
 
     fun startFocusSession() {
         countDownTimer?.cancel()
         _currentPhase.value = Phase.FOCUS
-        timeRemainingInMillis = 25 * 60 * 1000L
-        totalTimeInMillis = timeRemainingInMillis
-        _timeLeft.value = "25:00"
-        _progress.value = 0f
+
+        val focusDuration = 25 * 60 * 1000L
+
+        // Lógica de tiempo para Concentración
+        timeRemainingInMillis = if (testingStartTimeSeconds > 0) {
+            testingStartTimeSeconds.toLong() * 1000L
+        } else {
+            focusDuration
+        }
+        totalTimeInMillis = focusDuration // Siempre 25 min para el progreso
+
+        // Ajustar el tiempo mostrado al tiempo restante (10 segundos si está en modo prueba)
+        val initialMinutes = (timeRemainingInMillis / 1000) / 60
+        val initialSeconds = (timeRemainingInMillis / 1000) % 60
+        _timeLeft.value = String.format("%02d:%02d", initialMinutes, initialSeconds)
+
+        // Simular progreso si se usa tiempo de prueba
+        _progress.value = if (testingStartTimeSeconds > 0) {
+            1f - (timeRemainingInMillis.toFloat() / totalTimeInMillis.toFloat())
+        } else {
+            0f
+        }
+
         _isSkipBreakButtonVisible.value = false
         showNotification("Inicio de Concentración", "La sesión de concentración ha comenzado.")
         startTimer()
@@ -78,10 +112,29 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
 
     private fun startBreakSession() {
         _currentPhase.value = Phase.BREAK
-        timeRemainingInMillis = 5 * 60 * 1000L
-        totalTimeInMillis = timeRemainingInMillis
-        _timeLeft.value = "05:00"
-        _progress.value = 0f
+
+        val breakDuration = 5 * 60 * 1000L
+
+        // Lógica de tiempo para Descanso
+        timeRemainingInMillis = if (testingStartTimeSeconds > 0) {
+            testingStartTimeSeconds.toLong() * 1000L
+        } else {
+            breakDuration
+        }
+        totalTimeInMillis = breakDuration // Siempre 5 min para el progreso
+
+        // Ajustar el tiempo mostrado al tiempo restante (10 segundos si está en modo prueba)
+        val initialMinutes = (timeRemainingInMillis / 1000) / 60
+        val initialSeconds = (timeRemainingInMillis / 1000) % 60
+        _timeLeft.value = String.format("%02d:%02d", initialMinutes, initialSeconds)
+
+        // Simular progreso si se usa tiempo de prueba
+        _progress.value = if (testingStartTimeSeconds > 0) {
+            1f - (timeRemainingInMillis.toFloat() / totalTimeInMillis.toFloat())
+        } else {
+            0f
+        }
+
         _isSkipBreakButtonVisible.value = true
         showNotification("Inicio de Descanso", "La sesión de descanso ha comenzado.")
         startTimer()
@@ -106,6 +159,8 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
             override fun onFinish() {
                 _isRunning.value = false
                 _progress.value = 1f
+                // Reiniciar la variable de prueba al finalizar para evitar bucles de 10s
+                setTestingStartTime(0)
                 when (_currentPhase.value) {
                     Phase.FOCUS -> startBreakSession()
                     Phase.BREAK -> startFocusSession()
@@ -141,8 +196,9 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
         countDownTimer?.cancel()
         _isRunning.value = false
         _currentPhase.value = Phase.FOCUS
+        // Reinicio a valores reales
         timeRemainingInMillis = 25 * 60 * 1000L
-        totalTimeInMillis = timeRemainingInMillis
+        totalTimeInMillis = 25 * 60 * 1000L
         _timeLeft.value = "25:00"
         _progress.value = 0f
         _isSkipBreakButtonVisible.value = false
@@ -157,7 +213,10 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
         val prefs = context.getSharedPreferences("pomodoro_prefs", Context.MODE_PRIVATE)
         prefs.edit().apply {
             putString("phase", _currentPhase.value?.let { if (it == Phase.FOCUS) "Concentración" else "Descanso" } ?: "Concentración")
-            putString("timeLeft", _timeLeft.value ?: "25:00")
+            // Mostrar tiempo restante real en el widget
+            val minutes = (timeRemainingInMillis / 1000) / 60
+            val seconds = (timeRemainingInMillis / 1000) % 60
+            putString("timeLeft", String.format("%02d:%02d", minutes, seconds))
             putInt("progress", ((1f - (timeRemainingInMillis.toFloat() / totalTimeInMillis.toFloat())) * 100).toInt())
             apply()
         }
@@ -191,6 +250,8 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
             Phase.BREAK -> "⏰ Restan $formattedTime\n🧘‍♂️ ¡Relájate unos minutos!"
             else -> message
         }
+
+        // 4. Estilo de Imagen Expandida (BigPictureStyle)
         val bigImage = BitmapFactory.decodeResource(
             context.resources,
             if (_currentPhase.value == Phase.FOCUS) R.drawable.focus_image
@@ -198,14 +259,16 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
         )
         val style = NotificationCompat.BigPictureStyle().bigPicture(bigImage)
 
+        // 2. Colores y Luces de notificación
         val notificationColor = if (_currentPhase.value == Phase.FOCUS) Color.rgb(178, 34, 34) else Color.rgb(46, 139, 87)
 
+        // 6. Patrón de Vibración
         val vibrationPattern = if (_currentPhase.value == Phase.FOCUS)
             longArrayOf(0, 100, 100, 100)
         else
             longArrayOf(0, 500, 500)
 
-        // Intents para acciones
+        // Intents para acciones (3. Interacción Directa)
         val pauseIntent = Intent(context, PomodoroReceiver::class.java).apply { action = "PAUSE_TIMER" }
         val pausePendingIntent = PendingIntent.getBroadcast(
             context, 1, pauseIntent, PendingIntent.FLAG_IMMUTABLE
@@ -229,29 +292,30 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
         val progress = ((timeRemainingInMillis * 100) / totalTimeInMillis).toInt()
 
         val builder = NotificationCompat.Builder(context, MainActivity.CHANNEL_ID)
+            // 1. Icono Pequeño de fase
             .setSmallIcon(
                 if (_currentPhase.value == Phase.FOCUS) R.drawable.baseline_center_focus_strong_24
                 else R.drawable.baseline_free_breakfast_24
             )
             .setContentTitle(customTitle)
             .setContentText(customMessage)
-            .setStyle(style)
+            .setStyle(style) // Aplica el estilo de imagen
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .setColor(notificationColor)
+            .setColor(notificationColor) // Aplica el color
             .setColorized(true)
             .setLights(notificationColor, 1000, 1000)
-            .setVibrate(vibrationPattern)
-            .setProgress(100, progress, false)
-            .setSound(
+            .setVibrate(vibrationPattern) // Aplica vibración
+            .setProgress(100, progress, false) // 5. Barra de progreso
+            .setSound( // Aplica sonido
                 RingtoneManager.getDefaultUri(
                     if (_currentPhase.value == Phase.FOCUS) RingtoneManager.TYPE_RINGTONE
                     else RingtoneManager.TYPE_NOTIFICATION
                 )
             )
-            // Botones
+            // Botones de acción (3. Interacción Directa)
             .addAction(R.drawable.baseline_pause_circle_24, "Pausar", pausePendingIntent)
             .addAction(R.drawable.ic_resume, "Reanudar", resumePendingIntent)
             .addAction(R.drawable.ic_stop, "Terminar", endPendingIntent)
